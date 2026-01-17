@@ -24,9 +24,11 @@ func (a *ClaudeAgent) Name() string {
 
 // Run executes claude with the given prompt
 func (a *ClaudeAgent) Run(ctx context.Context, prompt string, output io.Writer) (string, error) {
-	// claude -p "<prompt>"
-	cmd := exec.CommandContext(ctx, "claude", "-p", prompt)
+	// claude -p "<prompt>" --dangerously-skip-permissions
+	// --dangerously-skip-permissions bypasses all permission prompts
+	cmd := exec.CommandContext(ctx, "claude", "-p", "--dangerously-skip-permissions", prompt)
 	cmd.Stdin = nil // Prevent hanging on user input prompts
+	cmd.Env = append(cmd.Environ(), "CI=true", "NONINTERACTIVE=1") // Signal non-interactive mode
 
 	// Create pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()

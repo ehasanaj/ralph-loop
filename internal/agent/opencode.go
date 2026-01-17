@@ -27,6 +27,7 @@ func (a *OpencodeAgent) Run(ctx context.Context, prompt string, output io.Writer
 	// opencode run "<prompt>"
 	cmd := exec.CommandContext(ctx, "opencode", "run", prompt)
 	cmd.Stdin = nil // Prevent hanging on user input prompts
+	cmd.Env = append(cmd.Environ(), "CI=true", "NONINTERACTIVE=1") // Signal non-interactive mode
 
 	// Create pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -44,8 +45,11 @@ It solves the context-bloat problem by:
 
 // Run command
 var (
-	runAgentType string
-	runPlanPath  string
+	runAgentType  string
+	runPlanPath   string
+	runTimeout    time.Duration
+	runMaxRetries int
+	runRetryDelay time.Duration
 )
 
 var runCmd = &cobra.Command{
@@ -80,11 +84,24 @@ Press Ctrl+C to gracefully stop the loop.`,
 			return fmt.Errorf("plan file not found: %s\nRun 'ralph-loop init' to create one", runPlanPath)
 		}
 
+		// Build config from flags
+		config := loop.DefaultConfig()
+		if runTimeout > 0 {
+			config.Timeout = runTimeout
+		}
+		if runMaxRetries > 0 {
+			config.MaxRetries = runMaxRetries
+		}
+		if runRetryDelay > 0 {
+			config.RetryDelay = runRetryDelay
+		}
+
 		// Create and run the loop
-		runner := loop.NewRunner(a, runPlanPath)
+		runner := loop.NewRunnerWithConfig(a, runPlanPath, config)
 
 		fmt.Printf("Starting ralph-loop with %s agent\n", a.Name())
 		fmt.Printf("Plan file: %s\n", runPlanPath)
+		fmt.Printf("Timeout: %v, Max retries: %d, Retry delay: %v\n", config.Timeout, config.MaxRetries, config.RetryDelay)
 		fmt.Println("Press Ctrl+C to stop gracefully")
 
 		return runner.Run()
@@ -143,6 +160,7 @@ var statusCmd = &cobra.Command{
 		completed := 0
 		failed := 0
 		pending := 0
+		skipped := 0
 
 		for _, step := range p.Steps {
 			status := "[ ]"
@@ -153,13 +171,20 @@ var statusCmd = &cobra.Command{
 			case plan.StatusFailed:
 				status = "[!]"
 				failed++
+			case plan.StatusSkipped:
+				status = "[-]"
+				skipped++
 			default:
 				pending++
 			}
-			fmt.Printf("  %s Step %d: %s\n", status, step.Number, step.Description)
+			retryInfo := ""
+			if step.RetryCount > 0 {
+				retryInfo = fmt.Sprintf(" (retries: %d)", step.RetryCount)
+			}
+			fmt.Printf("  %s Step %d: %s%s\n", status, step.Number, step.Description, retryInfo)
 		}
 
-		fmt.Printf("\nSummary: %d completed, %d failed, %d pending\n", completed, failed, pending)
+		fmt.Printf("\nSummary: %d completed, %d failed, %d skipped, %d pending\n", completed, failed, skipped, pending)
 
 		if p.IsComplete() {
 			fmt.Println("\nAll steps completed!")
@@ -175,6 +200,9 @@ func init() {
 	// Run command flags
 	runCmd.Flags().StringVarP(&runAgentType, "agent", "a", "claude", "AI agent to use (opencode, claude, or codex)")
 	runCmd.Flags().StringVarP(&runPlanPath, "plan", "p", "plan.md", "Path to the plan file")
+	runCmd.Flags().DurationVarP(&runTimeout, "timeout", "t", 30*time.Minute, "Timeout per step")
+	runCmd.Flags().IntVarP(&runMaxRetries, "max-retries", "r", 3, "Max retry attempts per step")
+	runCmd.Flags().DurationVar(&runRetryDelay, "retry-delay", 5*time.Second, "Initial delay between retries")
 
 	// Init command flags
 	initCmd.Flags().StringVarP(&initOutputPath, "output", "o", "plan.md", "Output path for the plan template")

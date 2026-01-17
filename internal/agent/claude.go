@@ -26,6 +26,7 @@ func (a *ClaudeAgent) Name() string {
 func (a *ClaudeAgent) Run(ctx context.Context, prompt string, output io.Writer) (string, error) {
 	// claude -p "<prompt>"
 	cmd := exec.CommandContext(ctx, "claude", "-p", prompt)
+	cmd.Stdin = nil // Prevent hanging on user input prompts
 
 	// Create pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()

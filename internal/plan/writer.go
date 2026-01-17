@@ -35,18 +35,22 @@ func updateStepInContent(content string, stepNum int, result StepResult) string 
 	foundNotesSection := false
 	notesSectionExists := false
 
+	// Determine the new marker based on status or success
+	newMarker := " "
+	if result.Status == StatusSkipped {
+		newMarker = "-"
+	} else if result.Success {
+		newMarker = "x"
+	} else {
+		newMarker = "!"
+	}
+
 	// First pass: update the checkbox in the plan section
 	for i, line := range lines {
 		if matches := stepLineRegex.FindStringSubmatch(line); matches != nil {
 			currentStep++
 			if currentStep == stepNum {
 				// Update the checkbox
-				newMarker := " "
-				if result.Success {
-					newMarker = "x"
-				} else {
-					newMarker = "!"
-				}
 				lines[i] = updateCheckbox(line, newMarker)
 			}
 		}
@@ -73,7 +77,9 @@ func updateStepInContent(content string, stepNum int, result StepResult) string 
 		if inNotesSection && notesStepNum == stepNum {
 			if statusRegex.MatchString(line) {
 				status := "completed"
-				if !result.Success {
+				if result.Status == StatusSkipped {
+					status = "skipped"
+				} else if !result.Success {
 					status = "failed"
 				}
 				lines[i] = fmt.Sprintf("**Status**: %s", status)
@@ -85,6 +91,8 @@ func updateStepInContent(content string, stepNum int, result StepResult) string 
 					notes = fmt.Sprintf("Failed: %s", result.Reason)
 				}
 				lines[i] = fmt.Sprintf("**Notes**: %s", notes)
+			} else if retriesRegex.MatchString(line) {
+				lines[i] = fmt.Sprintf("**Retries**: %d", result.RetryCount)
 			}
 		}
 
@@ -122,13 +130,15 @@ func updateStepInContent(content string, stepNum int, result StepResult) string 
 }
 
 func updateCheckbox(line, marker string) string {
-	re := regexp.MustCompile(`\[([ x!])\]`)
+	re := regexp.MustCompile(`\[([ x!\-])\]`)
 	return re.ReplaceAllString(line, fmt.Sprintf("[%s]", marker))
 }
 
 func createNotesSectionForStep(stepNum int, result StepResult) string {
 	status := "completed"
-	if !result.Success {
+	if result.Status == StatusSkipped {
+		status = "skipped"
+	} else if !result.Success {
 		status = "failed"
 	}
 	notes := summarizeOutput(result.Output)
@@ -139,7 +149,8 @@ func createNotesSectionForStep(stepNum int, result StepResult) string {
 	return fmt.Sprintf(`### Step %d
 **Status**: %s
 **Last Run**: %s
-**Notes**: %s`, stepNum, status, time.Now().Format("2006-01-02 15:04:05"), notes)
+**Notes**: %s
+**Retries**: %d`, stepNum, status, time.Now().Format("2006-01-02 15:04:05"), notes, result.RetryCount)
 }
 
 func insertAfter(slice []string, index int, value string) []string {
@@ -198,6 +209,8 @@ func WriteFile(path string, plan *Plan) error {
 			marker = "x"
 		case StatusFailed:
 			marker = "!"
+		case StatusSkipped:
+			marker = "-"
 		}
 		sb.WriteString(fmt.Sprintf("- [%s] Step %d: %s\n", marker, step.Number, step.Description))
 	}
@@ -221,6 +234,8 @@ func WriteFile(path string, plan *Plan) error {
 			notes = step.Notes
 		}
 		sb.WriteString(fmt.Sprintf("**Notes**: %s\n", notes))
+
+		sb.WriteString(fmt.Sprintf("**Retries**: %d\n", step.RetryCount))
 	}
 
 	return os.WriteFile(path, []byte(sb.String()), 0644)

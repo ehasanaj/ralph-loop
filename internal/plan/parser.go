@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	// Matches: - [ ] Step 1: Description or - [x] Step 2: Description or - [!] Step 3: Description
-	stepLineRegex = regexp.MustCompile(`^-\s+\[([ x!])\]\s+(?:Step\s+(\d+):\s+)?(.+)$`)
+	// Matches: - [ ] Step 1: Description or - [x] Step 2: Description or - [!] Step 3: Description or - [-] Step 4: Description
+	stepLineRegex = regexp.MustCompile(`^-\s+\[([ x!\-])\]\s+(?:Step\s+(\d+):\s+)?(.+)$`)
 
 	// Matches: # Project: Name
 	projectNameRegex = regexp.MustCompile(`^#\s+Project:\s+(.+)$`)
@@ -27,6 +27,9 @@ var (
 
 	// Matches: **Notes**: content
 	notesRegex = regexp.MustCompile(`^\*\*Notes\*\*:\s+(.*)$`)
+
+	// Matches: **Retries**: N
+	retriesRegex = regexp.MustCompile(`^\*\*Retries\*\*:\s+(\d+)$`)
 
 	// Matches: ## Context
 	contextSectionRegex = regexp.MustCompile(`^##\s+Context\s*$`)
@@ -133,6 +136,11 @@ func Parse(content string) (*Plan, error) {
 				continue
 			}
 
+			if matches := retriesRegex.FindStringSubmatch(line); matches != nil {
+				fmt.Sscanf(matches[1], "%d", &notes.retryCount)
+				continue
+			}
+
 			// Check if we've left the notes section (next header)
 			if strings.HasPrefix(line, "#") {
 				inNotesSection = false
@@ -157,6 +165,7 @@ func Parse(content string) (*Plan, error) {
 			if notes.notes != "(none)" {
 				plan.Steps[i].Notes = notes.notes
 			}
+			plan.Steps[i].RetryCount = notes.retryCount
 		}
 	}
 
@@ -164,9 +173,10 @@ func Parse(content string) (*Plan, error) {
 }
 
 type stepNotes struct {
-	status  string
-	lastRun string
-	notes   string
+	status     string
+	lastRun    string
+	notes      string
+	retryCount int
 }
 
 func parseCheckbox(marker string) StepStatus {
@@ -175,6 +185,8 @@ func parseCheckbox(marker string) StepStatus {
 		return StatusCompleted
 	case "!":
 		return StatusFailed
+	case "-":
+		return StatusSkipped
 	default:
 		return StatusPending
 	}

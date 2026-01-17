@@ -32,6 +32,7 @@ func (a *CodexAgent) Run(ctx context.Context, prompt string, output io.Writer) (
 
 	// codex "<prompt>"
 	cmd := exec.CommandContext(ctx, "codex", prompt)
+	cmd.Stdin = nil // Prevent hanging on user input prompts
 
 	// Create pipes for stdout and stderr
 	stdout, err := cmd.StdoutPipe()

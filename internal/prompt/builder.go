@@ -59,7 +59,8 @@ func Build(p *plan.Plan, step *plan.Step) string {
 	sb.WriteString("   STEP_COMPLETE\n")
 	sb.WriteString("4. If you encounter an error you cannot resolve, output exactly:\n")
 	sb.WriteString("   STEP_FAILED: <brief description of what went wrong>\n")
-	sb.WriteString("5. Make sure STEP_COMPLETE or STEP_FAILED appears at the end of your response\n\n")
+	sb.WriteString("5. Make sure STEP_COMPLETE or STEP_FAILED appears at the end of your response\n")
+	sb.WriteString("6. Never ask for user feedback or confirmation - make autonomous decisions using your best judgment\n\n")
 
 	sb.WriteString("Begin working on the step now.\n")
 

@@ -26,15 +26,22 @@ const (
 	AgentTypeCodex    AgentType = "codex"
 )
 
-// New creates a new agent of the specified type
-func New(agentType AgentType) (Agent, error) {
+// Options configures agent behavior
+type Options struct {
+	// Model specifies the model to use in format "provider/model"
+	// e.g., "openai/gpt-5.2", "anthropic/claude-sonnet-4-20250514"
+	Model string
+}
+
+// New creates a new agent of the specified type with options
+func New(agentType AgentType, opts Options) (Agent, error) {
 	switch agentType {
 	case AgentTypeOpencode:
-		return NewOpencodeAgent(), nil
+		return NewOpencodeAgent(opts), nil
 	case AgentTypeClaude:
-		return NewClaudeAgent(), nil
+		return NewClaudeAgent(opts), nil
 	case AgentTypeCodex:
-		return NewCodexAgent(), nil
+		return NewCodexAgent(opts), nil
 	default:
 		return nil, fmt.Errorf("unknown agent type: %s", agentType)
 	}

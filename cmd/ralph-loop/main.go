@@ -50,6 +50,7 @@ var (
 	runTimeout    time.Duration
 	runMaxRetries int
 	runRetryDelay time.Duration
+	runModel      string
 )
 
 var runCmd = &cobra.Command{
@@ -73,8 +74,11 @@ Press Ctrl+C to gracefully stop the loop.`,
 			return err
 		}
 
-		// Create agent
-		a, err := agent.New(agentType)
+		// Create agent with options
+		opts := agent.Options{
+			Model: runModel,
+		}
+		a, err := agent.New(agentType, opts)
 		if err != nil {
 			return err
 		}
@@ -100,6 +104,9 @@ Press Ctrl+C to gracefully stop the loop.`,
 		runner := loop.NewRunnerWithConfig(a, runPlanPath, config)
 
 		fmt.Printf("Starting ralph-loop with %s agent\n", a.Name())
+		if runModel != "" {
+			fmt.Printf("Model: %s\n", runModel)
+		}
 		fmt.Printf("Plan file: %s\n", runPlanPath)
 		fmt.Printf("Timeout: %v, Max retries: %d, Retry delay: %v\n", config.Timeout, config.MaxRetries, config.RetryDelay)
 		fmt.Println("Press Ctrl+C to stop gracefully")
@@ -200,6 +207,7 @@ func init() {
 	// Run command flags
 	runCmd.Flags().StringVarP(&runAgentType, "agent", "a", "claude", "AI agent to use (opencode, claude, or codex)")
 	runCmd.Flags().StringVarP(&runPlanPath, "plan", "p", "plan.md", "Path to the plan file")
+	runCmd.Flags().StringVarP(&runModel, "model", "m", "", "Model to use (e.g., openai/gpt-5.2, anthropic/claude-sonnet-4-20250514)")
 	runCmd.Flags().DurationVarP(&runTimeout, "timeout", "t", 30*time.Minute, "Timeout per step")
 	runCmd.Flags().IntVarP(&runMaxRetries, "max-retries", "r", 3, "Max retry attempts per step")
 	runCmd.Flags().DurationVar(&runRetryDelay, "retry-delay", 5*time.Second, "Initial delay between retries")

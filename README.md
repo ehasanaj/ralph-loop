@@ -133,11 +133,17 @@ ralph-loop run
 # Using OpenCode
 ralph-loop run --agent opencode
 
+# Using OpenCode with a specific model
+ralph-loop run --agent opencode --model openai/gpt-5.2
+
 # Using Codex (requires OPENAI_API_KEY)
 ralph-loop run --agent codex
 
 # Specify a different plan file
 ralph-loop run --plan my-feature.md
+
+# Custom timeout and retry settings
+ralph-loop run --timeout 1h --max-retries 5 --retry-delay 10s
 ```
 
 ### 4. Check Status
@@ -244,15 +250,23 @@ ralph-loop init -o feature.md      # Creates feature.md
 Execute the plan loop.
 
 ```bash
-ralph-loop run                     # Run with claude (default)
-ralph-loop run -a opencode         # Run with opencode
-ralph-loop run -a codex            # Run with codex
-ralph-loop run -p feature.md       # Use different plan file
+ralph-loop run                           # Run with claude (default)
+ralph-loop run -a opencode               # Run with opencode
+ralph-loop run -a opencode -m openai/gpt-5.2  # Specify model
+ralph-loop run -a codex                  # Run with codex
+ralph-loop run -p feature.md             # Use different plan file
+ralph-loop run -t 1h -r 5                # Custom timeout and retries
 ```
 
 **Flags:**
-- `-a, --agent`: AI agent to use (`opencode`, `claude`, or `codex`). Default: `claude`
-- `-p, --plan`: Path to plan file. Default: `plan.md`
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--agent` | `-a` | `claude` | AI agent to use (`opencode`, `claude`, or `codex`) |
+| `--plan` | `-p` | `plan.md` | Path to plan file |
+| `--model` | `-m` | (none) | Model to use (e.g., `openai/gpt-5.2`, `anthropic/claude-sonnet-4-20250514`) |
+| `--timeout` | `-t` | `30m` | Timeout per step |
+| `--max-retries` | `-r` | `3` | Max retry attempts per step |
+| `--retry-delay` | | `5s` | Initial delay between retries (with exponential backoff) |
 
 ### `ralph-loop status`
 
@@ -273,20 +287,28 @@ Uses the [Claude CLI](https://github.com/anthropics/claude-code) from Anthropic.
 # Install Claude CLI first
 npm install -g @anthropic-ai/claude-code
 
-# Run with Claude
+# Run with Claude (default model)
 ralph-loop run --agent claude
+
+# Run with a specific Claude model
+ralph-loop run --agent claude --model claude-sonnet-4-20250514
 ```
 
 ### OpenCode (`opencode`)
 
-Uses [OpenCode](https://github.com/opencode-ai/opencode).
+Uses [OpenCode](https://github.com/opencode-ai/opencode). Supports multiple providers including OpenAI, Anthropic, Google, and more.
 
 ```bash
 # Install OpenCode first
 go install github.com/opencode-ai/opencode@latest
 
-# Run with OpenCode
+# Run with OpenCode (uses configured default)
 ralph-loop run --agent opencode
+
+# Run with a specific provider/model
+ralph-loop run --agent opencode --model openai/gpt-5.2
+ralph-loop run --agent opencode --model anthropic/claude-sonnet-4-20250514
+ralph-loop run --agent opencode --model google/gemini-3-flash
 ```
 
 ### Codex (`codex`)
@@ -302,6 +324,9 @@ export OPENAI_API_KEY=your-key-here
 
 # Run with Codex
 ralph-loop run --agent codex
+
+# Run with a specific model
+ralph-loop run --agent codex --model gpt-5.2
 ```
 
 ## How Agents Communicate Completion
@@ -320,6 +345,35 @@ STEP_FAILED: Brief description of what went wrong
 
 The prompt sent to agents includes instructions to output these markers. If no marker is found, the step is treated as failed.
 
+## Non-Interactive Mode
+
+ralph-loop runs agents in a fully autonomous, non-interactive mode:
+
+- **Stdin closed**: Agents receive EOF on stdin, preventing blocking on user input
+- **Environment signals**: Sets `CI=true` and `NONINTERACTIVE=1` to signal non-interactive mode
+- **Permission bypass**: Claude runs with `--dangerously-skip-permissions` to avoid prompts
+- **Autonomous instructions**: Prompts include instructions to never ask for user feedback
+
+### Stall Detection
+
+ralph-loop monitors agent output and displays warnings when:
+
+1. **Prompt patterns detected**: If the agent outputs patterns like `[y/n]`, `confirm?`, or `Press enter`, a warning box appears showing the question being asked.
+
+2. **Output stalls**: If no output is received for 30+ seconds, a warning is displayed with the last output received.
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║  WARNING: Agent is asking for user input!                                ║
+║  The agent should be running autonomously without prompts.               ║
+║  Press Ctrl+C to cancel - the step will be retried automatically.        ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  AGENT IS ASKING:                                                        ║
+╟──────────────────────────────────────────────────────────────────────────╢
+║  This will modify 15 files. Do you want to proceed? [y/n]                ║
+╚══════════════════════════════════════════════════════════════════════════╝
+```
+
 ## Graceful Shutdown
 
 Press `Ctrl+C` to stop the loop gracefully. ralph-loop will:
@@ -337,22 +391,24 @@ You can resume by running `ralph-loop run` again.
 ralph-loop/
 ├── cmd/
 │   └── ralph-loop/
-│       └── main.go           # CLI entry point
+│       └── main.go              # CLI entry point
 ├── internal/
 │   ├── agent/
-│   │   ├── agent.go          # Agent interface and factory
-│   │   ├── claude.go         # Claude CLI agent
-│   │   ├── codex.go          # OpenAI Codex agent
-│   │   └── opencode.go       # OpenCode agent
+│   │   ├── agent.go             # Agent interface and factory
+│   │   ├── claude.go            # Claude CLI agent
+│   │   ├── codex.go             # OpenAI Codex agent
+│   │   └── opencode.go          # OpenCode agent
 │   ├── loop/
-│   │   └── runner.go         # Main orchestration loop
+│   │   ├── config.go            # Loop configuration
+│   │   ├── promptdetector.go    # Detects agent prompts/stalls
+│   │   └── runner.go            # Main orchestration loop
 │   ├── plan/
-│   │   ├── parser.go         # Plan file parser
-│   │   ├── template.go       # Plan template generation
-│   │   ├── types.go          # Plan/Step types
-│   │   └── writer.go         # Plan file writer
+│   │   ├── parser.go            # Plan file parser
+│   │   ├── template.go          # Plan template generation
+│   │   ├── types.go             # Plan/Step types
+│   │   └── writer.go            # Plan file writer
 │   └── prompt/
-│       └── builder.go        # Prompt construction
+│       └── builder.go           # Prompt construction
 ├── Makefile
 ├── go.mod
 └── README.md

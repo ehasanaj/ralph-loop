@@ -28,8 +28,7 @@ func (a *OpencodeAgent) Name() string {
 // Run executes opencode with the given prompt
 func (a *OpencodeAgent) Run(ctx context.Context, prompt string, output io.Writer) (string, error) {
 	// Build command args
-	// --format json streams events as JSON instead of buffering formatted output
-	args := []string{"run", "--format", "json"}
+	args := []string{"run"}
 
 	// Add model flag if specified (format: provider/model)
 	if a.opts.Model != "" {

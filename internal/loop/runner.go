@@ -57,6 +57,10 @@ func (r *Runner) Run() error {
 }
 
 func (r *Runner) runLoop(ctx context.Context) error {
+	// Create prompt detector to monitor for feedback prompts
+	promptDetector := NewPromptDetector(os.Stdout)
+	defer promptDetector.Close()
+
 	for {
 		// Check for cancellation
 		select {
@@ -119,8 +123,11 @@ func (r *Runner) runLoop(ctx context.Context) error {
 		// Create timeout context
 		stepCtx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 
-		// Run agent
-		output, err := r.agent.Run(stepCtx, promptText, os.Stdout)
+		// Reset prompt detector for new step
+		promptDetector.Reset()
+
+		// Run agent with prompt detection
+		output, err := r.agent.Run(stepCtx, promptText, promptDetector)
 		cancel()
 
 		// Check for timeout
